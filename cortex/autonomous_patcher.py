@@ -12,18 +12,23 @@ Automatically patches security vulnerabilities with safety controls including:
 
 import logging
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 from cortex.installation_history import InstallationHistory, InstallationStatus, InstallationType
 from cortex.vulnerability_scanner import Severity, Vulnerability, VulnerabilityScanner
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Module-level apt update tracking (shared across all instances)
+_apt_update_lock = threading.Lock()
+_apt_last_updated: datetime | None = None
+_APT_UPDATE_INTERVAL_SECONDS = 300  # 5 minutes
 
 
 class PatchStrategy(Enum):
@@ -141,13 +146,51 @@ class AutonomousPatcher:
         except Exception as e:
             return (False, "", str(e))
 
-    def _check_package_update_available(self, package_name: str) -> str | None:
-        """Check if an update is available for a package"""
-        try:
-            # Update package list first
-            self._run_command(["apt-get", "update", "-qq"])
+    def ensure_apt_updated(self, force: bool = False) -> bool:
+        """
+        Ensure apt package list is updated. Thread-safe and rate-limited.
+        
+        Args:
+            force: If True, force update even if recently updated
+            
+        Returns:
+            True if update succeeded or was recently done, False on failure
+        """
+        global _apt_last_updated
+        
+        with _apt_update_lock:
+            now = datetime.now()
+            
+            # Check if we need to update
+            if not force and _apt_last_updated is not None:
+                elapsed = (now - _apt_last_updated).total_seconds()
+                if elapsed < _APT_UPDATE_INTERVAL_SECONDS:
+                    logger.debug(f"Apt cache still fresh ({elapsed:.0f}s old), skipping update")
+                    return True
+            
+            # Run apt-get update
+            logger.info("Updating apt package list...")
+            success, stdout, stderr = self._run_command(["apt-get", "update", "-qq"])
+            
+            if success:
+                _apt_last_updated = now
+                logger.info("Apt package list updated successfully")
+                return True
+            else:
+                logger.warning(f"Failed to update apt package list: {stderr}")
+                # Still set timestamp to avoid hammering on repeated failures
+                _apt_last_updated = now
+                return False
 
-            # Check for available updates
+    def _check_package_update_available(self, package_name: str) -> str | None:
+        """
+        Check if an update is available for a package.
+        
+        Note: Call ensure_apt_updated() before iterating over multiple packages
+        to avoid repeated apt-get update calls.
+        """
+        try:
+            # Check for available updates (apt-get update should be called beforehand)
             success, stdout, _ = self._run_command(
                 ["apt-cache", "policy", package_name]
             )
@@ -249,6 +292,9 @@ class AutonomousPatcher:
             if vuln.package_name not in package_vulns:
                 package_vulns[vuln.package_name] = []
             package_vulns[vuln.package_name].append(vuln)
+
+        # Update apt package list once before checking all packages
+        self.ensure_apt_updated()
 
         # Check for available updates
         requires_reboot = False
