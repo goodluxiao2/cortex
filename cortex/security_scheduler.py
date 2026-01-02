@@ -352,11 +352,11 @@ WantedBy=timers.target
     def _has_root_privileges(self) -> bool:
         """Check if we have root privileges (running as root or have passwordless sudo)"""
         import os
-        
+
         # Check if running as root
         if os.geteuid() == 0:
             return True
-        
+
         # Check if we have passwordless sudo access
         try:
             result = subprocess.run(
