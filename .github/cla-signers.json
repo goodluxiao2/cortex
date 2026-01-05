@@ -167,9 +167,16 @@
       ],
       "signed_date": "2026-01-03",
       "cla_version": "1.0"
+    },
+    {
+      "name": "Aether-AGI-Operator",
+      "github_username": "goodluxiao2",
+      "emails": [
+        "goodluxiao@gmail.com"
+      ],
+      "signed_date": "2026-01-05",
+      "cla_version": "1.0"
     }
-
-
   ],
   "corporations": {
     "AI Venture Holdings LLC": {
