@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Intelligent Package Manager Wrapper for Cortex Linux
+Intelligent Intelligent Package Manager Wrapper Unified Package Manager Wrapper for Cortex Linux
 
 Translates natural language requests into apt/yum package manager commands.
 Supports common software installations, development tools, and libraries.
